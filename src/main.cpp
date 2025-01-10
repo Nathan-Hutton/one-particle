@@ -1,3 +1,4 @@
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 
@@ -24,8 +25,14 @@ int main()
     }
     glfwMakeContextCurrent(window);
 
-    // Place the window at the top-left corner of the screen (might not be necessary)
-    //glfwSetWindowPos(window, 0, 0);
+    // Query and load all OpenGL extensions allowed by your drivers
+    // Allows us to access features/extensions not in the core OpenGL specification
+    if(glewInit() != GLEW_OK)
+    {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        throw std::runtime_error("Glew initialization failed");
+    }
     
     glViewport(0, 0, mode->width, mode->height);
     glfwSetFramebufferSizeCallback(window, resize_window);
