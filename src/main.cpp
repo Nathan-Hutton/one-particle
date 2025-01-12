@@ -1,9 +1,13 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 void resize_window(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow *window);
+std::string readFile(const std::string& filePath);
 
 int main()
 {
@@ -16,7 +20,7 @@ int main()
     GLFWmonitor* monitor { glfwGetPrimaryMonitor() };
     const GLFWvidmode* mode { glfwGetVideoMode(monitor) };
 
-    GLFWwindow* window { glfwCreateWindow(mode->width, mode->height, "One-Particle System", NULL, NULL) };
+    GLFWwindow* window { glfwCreateWindow(mode->width, mode->height, "Triangle", NULL, NULL) };
     if (window == NULL)
     {
         std::cout << "Failed to create window\n";
@@ -24,6 +28,7 @@ int main()
         return -1;
     }
     glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, resize_window);
 
     // Query and load all OpenGL extensions allowed by your drivers
     // Allows us to access features/extensions not in the core OpenGL specification
@@ -33,17 +38,98 @@ int main()
         glfwTerminate();
         throw std::runtime_error("Glew initialization failed");
     }
-    
-    glViewport(0, 0, mode->width, mode->height);
-    glfwSetFramebufferSizeCallback(window, resize_window);
 
-    glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // Set background color to red
+    // ********************
+    // Handle triangle data
+    // ********************
+    GLfloat triangleVertices[] {
+        -0.5f, -0.5f, 0.0f,
+         0.5f, -0.5f, 0.0f,
+         0.0f,  0.5f, 0.0f
+    };
 
+    GLuint VAO, VBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVertices), triangleVertices, GL_STATIC_DRAW);
+
+    // Set vertex attributes
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    // **************
+    // Handle shaders
+    // **************
+
+    // Vertex shader
+    const std::string vertexShaderCode { readFile("../shaders/shader.vert") };
+    const GLchar* vertexShaderAsGLchar { vertexShaderCode.c_str() };
+
+    GLuint vertexShader { glCreateShader(GL_VERTEX_SHADER) };
+    glShaderSource(vertexShader, 1, &vertexShaderAsGLchar, NULL);
+    glCompileShader(vertexShader);
+
+    int success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+        std::cout << "ERROR: SHADER COMPILATION FAILED\n" << infoLog << '\n';
+    }
+
+    // Fragment shader
+    const std::string fragmentShaderCode { readFile("../shaders/shader.frag") };
+    const GLchar* fragmentShaderAsGLchar { fragmentShaderCode.c_str() };
+
+    GLuint fragmentShader { glCreateShader(GL_FRAGMENT_SHADER) };
+    glShaderSource(fragmentShader, 1, &fragmentShaderAsGLchar, NULL);
+    glCompileShader(fragmentShader);
+
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+        std::cout << "ERROR: SHADER COMPILATION FAILED\n" << infoLog << '\n';
+    }
+
+    // Link shaders
+    GLuint shaderProgram { glCreateProgram() };
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+        std::cout << "ERROR: SHADER LINKING FAILED\n" << infoLog << '\n';
+    }
+
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+    glUseProgram(shaderProgram);
+
+    // *********
+    // Main loop
+    // *********
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Set background color to red
     while (!glfwWindowShouldClose(window)) 
     {
         processInput(window);
-
         glClear(GL_COLOR_BUFFER_BIT);
+
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindVertexArray(0);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -63,4 +149,16 @@ void resize_window(GLFWwindow* window, int width, int height)
 {
     (void)window; // This just gets rid of the unused parameter warning
     glViewport(0, 0, width, height);
+}
+
+std::string readFile(const std::string& filePath)
+{
+    std::ifstream file { filePath };
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file: " + filePath);
+    }
+    
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
 }
